@@ -48,7 +48,8 @@ TARGET = coop-door
 SRC =	$(TARGET).c 	 \
 		button-driver.c  \
 		lcd-driver.c \
-		rtc.c
+		rtc.c \
+		data-store.c
 
 
 # MCU name, Teensy has at90usb162, Teensy++ has at90usb646

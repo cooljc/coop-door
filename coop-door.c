@@ -9,7 +9,7 @@
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
  * version 2.1 of the License, or (at your option) any later version.
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
@@ -17,9 +17,9 @@
 
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, 
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
  * MA  02110-1301  USA.
- * 
+ *
  */
 
 /* ------------------------------------------------------------------ */
@@ -37,13 +37,14 @@
 #include "button-driver.h"
 #include "lcd-driver.h"
 #include "rtc.h"
+#include "data-store.h"
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 typedef uint8_t (*func_p)(uint8_t, uint8_t *);
 
 // LEDs on POP-168 board: PD2 (Di2) & PD4 (Di4) - Tided high
-// Switches on POP-168 board: PD2 (Di2) & PD4 (Di4) 
+// Switches on POP-168 board: PD2 (Di2) & PD4 (Di4)
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 
@@ -85,11 +86,11 @@ enum {
 	ST_MAX
 };
 /* must match states above */
-func_p states[ST_MAX] = {idleState, 
-						topMenu, 
-						exitMenu, 
-						setupMenu_mode, 
-						doorOpening, 
+func_p states[ST_MAX] = {idleState,
+						topMenu,
+						exitMenu,
+						setupMenu_mode,
+						doorOpening,
 						doorClosing};
 
 
@@ -114,20 +115,20 @@ uint8_t idleState(uint8_t key, uint8_t *enter)
 {
 	static uint8_t lastSec = 0;
 	rtc_time_t currentTime;
-	
+
 	if (*enter) {
 		LCD_WriteLine(0, 16, "    --:--:--    ");
 		LCD_WriteLine(1, 16, "     cooljc     ");
 		MotorStop();
 		*enter = 0;
 	}
-	
+
 	RTC_GetTime (&currentTime);
 	if (lastSec != currentTime.m_sec) {
 		LCD_WriteTime(currentTime);
 		lastSec = currentTime.m_sec;
 	}
-	
+
 	if (key == KEY_MENU) {
 		return ST_TOP_MENU;
 	}
@@ -137,7 +138,7 @@ uint8_t idleState(uint8_t key, uint8_t *enter)
 	else if (key == KEY_CLOSE) {
 		return ST_DOOR_CLOSING;
 	}
-	
+
 	return ST_IDLE;
 }
 
@@ -150,7 +151,7 @@ uint8_t topMenu(uint8_t key, uint8_t *enter)
 		LCD_WriteLine(1, 16, "  Press Menu    ");
 		*enter = 0;
 	}
-	
+
 	if (key == KEY_MENU) {
 		return ST_SETUP_MENU_MODE;
 	}
@@ -166,7 +167,7 @@ uint8_t exitMenu(uint8_t key, uint8_t *enter)
 		LCD_WriteLine(1, 16, "  Press Menu    ");
 		*enter = 0;
 	}
-	
+
 	if (key == KEY_MENU) {
 		return ST_IDLE;
 	}
@@ -176,19 +177,19 @@ uint8_t exitMenu(uint8_t key, uint8_t *enter)
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 uint8_t setupMenu_mode(uint8_t key, uint8_t *enter)
-{	
+{
 	if (*enter) {
 		LCD_WriteLine(0, 16, "== Door Mode  ==");
 		LCD_WriteLine(1, 16, "  Press Menu    ");
 		*enter = 0;
 	}
-	
+
 	return nextMenu(ST_SETUP_MENU_MODE, key);
 }
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 uint8_t doorOpening(uint8_t key, uint8_t *enter)
-{	
+{
 	if (*enter) {
 		LCD_WriteLine(0, 16, "Door Opening... ");
 		LCD_WriteLine(1, 16, "                ");
@@ -196,7 +197,7 @@ uint8_t doorOpening(uint8_t key, uint8_t *enter)
 		MotorBackward();
 		*enter = 0;
 	}
-	
+
 	if (key == KEY_OPEN) {
 		//return ST_IDLE;
 	}
@@ -207,14 +208,14 @@ uint8_t doorOpening(uint8_t key, uint8_t *enter)
 	else if (key == KEY_DOOR_OPEN) {
 		return ST_IDLE;
 	}
-	
+
 	return ST_DOOR_OPENING;
 }
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 uint8_t doorClosing(uint8_t key, uint8_t *enter)
-{	
+{
 	if (*enter) {
 		LCD_WriteLine(0, 16, "Door Closing... ");
 		LCD_WriteLine(1, 16, "                ");
@@ -222,7 +223,7 @@ uint8_t doorClosing(uint8_t key, uint8_t *enter)
 		MotorForward();
 		*enter = 0;
 	}
-	
+
 	if (key == KEY_OPEN) {
 		return ST_DOOR_OPENING;
 	}
@@ -241,15 +242,17 @@ uint8_t doorClosing(uint8_t key, uint8_t *enter)
 void setDefaultTimes (void)
 {
 	rtc_time_t times;
-	// TODO: Read alarm times from EEP
-	times.m_hour = 19;
-	times.m_min = 6;
+
+	times.m_hour = 12;
+	times.m_min = 0;
 	times.m_sec = 0;
 	RTC_SetTime(&times);
-	//times.m_hour = 6;
-	times.m_min = 8;
+
+	// Read alarm times from EEP
+	DS_GetOpenAlarm(&times);
 	RTC_SetOpenTime(&times);
-	times.m_hour = 18;
+
+	DS_GetCloseAlarm(&times);
 	RTC_SetCloseTime(&times);
 }
 
@@ -263,33 +266,33 @@ int main (void)
 	uint8_t enterState = 1;
 	uint8_t alarm = RTC_ALARM_NONE;
 	func_p pStateFunc = states[state];
-	
-	
+
+
 	/* disable watchdog */
 	wdt_reset();
 	Wdt_clear_flag();
 	Wdt_change_enable();
 	Wdt_stop();
-		
+
 	Clear_prescaler();
 	InitLED();
 	Led1On();
-	
+
 	InitMotor();
 	MotorStop();
-	
+
 	BUTTON_Init();
 	LCD_Init();
 	setDefaultTimes();
 	RTC_Init();
 
 	sei();
-	
+
 	while (1)
 	{
 		/* get a key press or limit switch */
 		key = BUTTON_GetKey();
-		
+
 		/* override key in favour of alarm */
 		alarm = RTC_TestAlarm();
 		if (alarm == RTC_ALARM_OPEN) {
@@ -298,16 +301,16 @@ int main (void)
 		else if (alarm == RTC_ALARM_CLOSE) {
 			key = KEY_CLOSE;
 		}
-		
+
 		/* execute the current state function */
 		nextstate = pStateFunc(key, &enterState);
-		
+
 		if (nextstate != state) {
 			pStateFunc = states[nextstate];
 			state = nextstate;
 			enterState = 1;
 		}
-		
+
 	} /* end of while(1) */
 	return 0;
 }
