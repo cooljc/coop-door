@@ -25,11 +25,20 @@
 
 #include "rtc.h"
 
+enum {
+	DOOR_MODE_NOT_SET = 0,
+	DOOR_MODE_OPEN_CLOSE,
+	DOOR_MODE_OPEN_ONLY,
+	DOOR_MODE_LIGHT
+}; 
+
 void DS_GetOpenAlarm(rtc_time_t *alarm);
 void DS_GetCloseAlarm(rtc_time_t *alarm);
+void DS_GetAlarmMode(uint8_t *mode);
 
 void DS_SetOpenAlarm(rtc_time_t *alarm);
 void DS_SetCloseAlarm(rtc_time_t *alarm);
+void DS_SetAlarmMode(uint8_t mode);
 
 #endif /* #ifndef _DATA_STORE_H */
 /* EOF */

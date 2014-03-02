@@ -32,7 +32,7 @@
 /* ------------------------------------------------------------------ */
 /* Address Map ------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
-/* 
+/*
  * 0x0000 -> Open Alarm Hour
  * 0x0001 -> Open Alarm Minute
  * 0x0002 -> Close Alarm Hour
@@ -43,6 +43,7 @@
 #define ADDR_ALARM_OPEN_MIN		0x01
 #define ADDR_ALARM_CLOSE_HOUR	0x02
 #define ADDR_ALARM_CLOSE_MIN	0x03
+#define ADDR_ALARM_MODE			0x04
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 void DS_GetOpenAlarm(rtc_time_t *alarm)
@@ -77,11 +78,22 @@ void DS_GetCloseAlarm(rtc_time_t *alarm)
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
+void DS_GetAlarmMode(uint8_t *mode)
+{
+	*mode = eeprom_read_byte((uint8_t*)ADDR_ALARM_CLOSE_HOUR);
+	if (*mode > DOOR_MODE_LIGHT) {
+		*mode = DOOR_MODE_OPEN_CLOSE;
+	}
+}
+
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
 void DS_SetOpenAlarm(rtc_time_t *alarm)
 {
 	eeprom_write_byte((uint8_t*)ADDR_ALARM_OPEN_HOUR, alarm->m_hour);
 	eeprom_write_byte((uint8_t*)ADDR_ALARM_OPEN_MIN, alarm->m_min);
-	
+
 }
 
 /* ------------------------------------------------------------------ */
@@ -90,4 +102,11 @@ void DS_SetCloseAlarm(rtc_time_t *alarm)
 {
 	eeprom_write_byte((uint8_t*)ADDR_ALARM_CLOSE_HOUR, alarm->m_hour);
 	eeprom_write_byte((uint8_t*)ADDR_ALARM_CLOSE_MIN, alarm->m_min);
+}
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+void DS_SetAlarmMode(uint8_t mode)
+{
+	eeprom_write_byte((uint8_t*)ADDR_ALARM_MODE, mode);
 }
