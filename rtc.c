@@ -39,14 +39,14 @@ void RTC_Init (void)
 	// Divide system clock by 1024 (16MHz/1024 = 15625 = 1s)
 	TCCR1A = 0;
 	TCCR1B = 0x05;
-	
+
 	TCCR1C = 0x80; // force compare A
-	
+
 	//OCR1AH = ((15625 << 8) & 0xff);
 	//OCR1AL = (15625 & 0xff);
 	OCR1A = 15625;
 	TIMSK1 = 0x02; //output compare A match interrupt enable
-	
+
 	TCNT1 = 0;
 }
 
@@ -112,7 +112,7 @@ uint8_t RTC_TestAlarm (void)
 	uint8_t loop = 0;
 	for (loop=0; loop<2; loop++) {
 		if ((alarms[loop].m_hour == clock.m_hour) &&
-				(alarms[loop].m_min == clock.m_min) && 
+				(alarms[loop].m_min == clock.m_min) &&
 				(alarms[loop].m_sec == clock.m_sec)) {
 			return loop+RTC_ALARM_OPEN;
 		}
