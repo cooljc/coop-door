@@ -41,7 +41,7 @@
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
-typedef uint8_t (*func_p)(uint8_t, uint8_t *);
+
 
 // LEDs on POP-168 board: PD2 (Di2) & PD4 (Di4) - Tided high
 // Switches on POP-168 board: PD2 (Di2) & PD4 (Di4)
@@ -67,32 +67,64 @@ typedef uint8_t (*func_p)(uint8_t, uint8_t *);
 #define MotorBackward()	(PORTD |= MA_2)
 
 
+typedef struct {
+	uint8_t 	m_enter;
+	uint8_t 	m_key;
+	uint8_t 	m_top_menu_state;
+	uint8_t 	m_sub_menu_state;
+	uint8_t 	m_in_sub_menu;
+	uint8_t 	m_setup_change_state;
+	uint8_t		m_door_mode;
+	uint8_t		m_temp;
+	rtc_time_t 	m_time;
+} state_params_t;
+
+typedef uint8_t (*func_p)(state_params_t *);
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
-uint8_t idleState(uint8_t key, uint8_t *enter);
-uint8_t topMenu(uint8_t key, uint8_t *enter);
-uint8_t exitMenu(uint8_t key, uint8_t *enter);
-uint8_t setupMenu_mode(uint8_t key, uint8_t *enter);
-uint8_t doorOpening(uint8_t key, uint8_t *enter);
-uint8_t doorClosing(uint8_t key, uint8_t *enter);
+uint8_t idleState(state_params_t *params);
+uint8_t setupMenu(state_params_t *params);
+uint8_t exitMenu(state_params_t *params);
+uint8_t setupMenu_mode(state_params_t *params);
+uint8_t setupMenu_clock(state_params_t *params);
+uint8_t setupMenu_open_al(state_params_t *params);
+uint8_t setupMenu_close_al(state_params_t *params);
+uint8_t doorOpening(state_params_t *params);
+uint8_t doorClosing(state_params_t *params);
 
 enum {
 	ST_IDLE = 0,
-	ST_TOP_MENU,
+	ST_SETUP_MENU,
 	ST_EXIT_MENU,
 	ST_SETUP_MENU_MODE,
+	ST_SETUP_MENU_CLOCK,
+	ST_SETUP_MENU_OPEN_AL,
+	ST_SETUP_MENU_CLOSE_AL,
 	ST_DOOR_OPENING,
 	ST_DOOR_CLOSING,
 	ST_MAX
 };
+
 /* must match states above */
 func_p states[ST_MAX] = {idleState,
-						topMenu,
+						setupMenu,
 						exitMenu,
 						setupMenu_mode,
+						setupMenu_clock,
+						setupMenu_open_al,
+						setupMenu_close_al,
 						doorOpening,
 						doorClosing};
 
+#define TOP_MENU_STATE_MAX 2
+uint8_t top_menu_states[TOP_MENU_STATE_MAX] = {ST_SETUP_MENU, ST_EXIT_MENU};
+
+#define SUB_MENU_STATE_MAX 5
+uint8_t sub_menu_states[SUB_MENU_STATE_MAX] = {ST_SETUP_MENU_MODE,
+											   ST_SETUP_MENU_CLOCK,
+											   ST_SETUP_MENU_OPEN_AL,
+											   ST_SETUP_MENU_CLOSE_AL,
+											   ST_EXIT_MENU};
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
@@ -100,42 +132,209 @@ func_p states[ST_MAX] = {idleState,
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
-uint8_t nextMenu(uint8_t currentState, uint8_t key)
+uint8_t nextTopMenu(uint8_t currentState, state_params_t *params)
 {
-	if (key == KEY_OPEN) {
+	uint8_t retState = currentState;
+	if (params->m_key == KEY_OPEN) {
+		params->m_top_menu_state++;
+		if (params->m_top_menu_state == TOP_MENU_STATE_MAX) {
+			params->m_top_menu_state = 0;
+		}
+		retState = top_menu_states[params->m_top_menu_state];
 	}
-	else if (key == KEY_CLOSE) {
+	else if (params->m_key == KEY_CLOSE) {
+		params->m_top_menu_state--;
+		if (params->m_top_menu_state == 255) {
+			params->m_top_menu_state = TOP_MENU_STATE_MAX-1;
+		}
+		retState = top_menu_states[params->m_top_menu_state];
+	}
+	return retState;
+}
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+uint8_t nextSubMenu(uint8_t currentState, state_params_t *params)
+{
+	uint8_t retState = currentState;
+	if (params->m_key == KEY_OPEN) {
+		params->m_sub_menu_state++;
+		if (params->m_sub_menu_state == SUB_MENU_STATE_MAX) {
+			params->m_sub_menu_state = 0;
+		}
+		retState = sub_menu_states[params->m_sub_menu_state];
+	}
+	else if (params->m_key == KEY_CLOSE) {
+		params->m_sub_menu_state--;
+		if (params->m_sub_menu_state == 255) {
+			params->m_sub_menu_state = SUB_MENU_STATE_MAX-1;
+		}
+		retState = sub_menu_states[params->m_sub_menu_state];
+	}
+	return retState;
+}
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+uint8_t SetTimeValue(uint8_t currentState, state_params_t *params)
+{
+	if (params->m_enter) {
+		if (currentState == ST_SETUP_MENU_CLOCK) {
+			RTC_GetTime(&params->m_time);
+		}
+		else if (currentState == ST_SETUP_MENU_OPEN_AL) {
+			DS_GetOpenAlarm(&params->m_time);
+		}
+		else if (currentState == ST_SETUP_MENU_CLOSE_AL) {
+			DS_GetCloseAlarm(&params->m_time);
+		}
+		LCD_WriteLine(0, 16, "                ");
+		LCD_WriteLine(1, 16, "                ");
+		LCD_WriteTime(params->m_time);
+		LCD_SetCursor(LCD_CURSOR_HOUR);
+		params->m_enter = 0;
+	}
+
+	if (params->m_key == KEY_OPEN) {
+		if (params->m_setup_change_state == 1) {
+			// update hour
+			params->m_time.m_hour++;
+			if (params->m_time.m_hour == 24) {
+				params->m_time.m_hour = 0;
+			}
+			LCD_WriteTime(params->m_time);
+			LCD_SetCursor(LCD_CURSOR_HOUR);
+		}
+		else if (params->m_setup_change_state == 2) {
+			// update minute
+			params->m_time.m_min++;
+			if (params->m_time.m_min == 60) {
+				params->m_time.m_min = 0;
+			}
+			LCD_WriteTime(params->m_time);
+			LCD_SetCursor(LCD_CURSOR_MIN);
+		}
+	}
+	else if (params->m_key == KEY_CLOSE) {
+		if (params->m_setup_change_state == 1) {
+			// update hour
+			params->m_time.m_hour--;
+			if (params->m_time.m_hour == 255) {
+				params->m_time.m_hour = 23;
+			}
+			LCD_WriteTime(params->m_time);
+			LCD_SetCursor(LCD_CURSOR_HOUR);
+		}
+		else if (params->m_setup_change_state == 2) {
+			// update minute
+			params->m_time.m_min--;
+			if (params->m_time.m_min == 255) {
+				params->m_time.m_min = 59;
+			}
+			LCD_WriteTime(params->m_time);
+			LCD_SetCursor(LCD_CURSOR_MIN);
+		}
+	}
+	else if (params->m_key == KEY_MENU) {
+		params->m_setup_change_state++;
+		if (params->m_setup_change_state == 2) {
+			// change LCD to min
+			LCD_SetCursor(LCD_CURSOR_MIN);
+		}
+		else if (params->m_setup_change_state == 3) {
+			// save time
+			LCD_SetCursor(LCD_CURSOR_OFF);
+			LCD_WriteLine(0, 16, "Saving...       ");
+			if (currentState == ST_SETUP_MENU_CLOCK) {
+				RTC_SetTime(&params->m_time);
+			}
+			else if (currentState == ST_SETUP_MENU_OPEN_AL) {
+				DS_SetOpenAlarm(&params->m_time);
+				RTC_SetOpenTime(&params->m_time);
+			}
+			else if (currentState == ST_SETUP_MENU_CLOSE_AL) {
+				DS_SetCloseAlarm(&params->m_time);
+				RTC_SetCloseTime(&params->m_time);
+			}
+			params->m_setup_change_state = 4;
+		}
 	}
 	return currentState;
 }
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
-uint8_t idleState(uint8_t key, uint8_t *enter)
+uint8_t SetModeValue(uint8_t currentState, state_params_t *params)
 {
-	static uint8_t lastSec = 0;
+	if (params->m_enter) {
+		LCD_WriteLine(0, 16, "=   Door Mode  =");
+		if (params->m_temp == DOOR_MODE_OPEN_CLOSE) {
+			LCD_WriteLine(1, 16, "   Open/Close   ");
+		}
+		else if (params->m_temp == DOOR_MODE_OPEN_ONLY) {
+			LCD_WriteLine(1, 16, "   Open Only    ");
+		}
+		params->m_enter = 0;
+	}
+
+	if ((params->m_key == KEY_OPEN) || (params->m_key == KEY_CLOSE)) {
+		if (params->m_temp == DOOR_MODE_OPEN_CLOSE) {
+			params->m_temp = DOOR_MODE_OPEN_ONLY;
+		}
+		else {
+			params->m_temp = DOOR_MODE_OPEN_CLOSE;
+		}
+		params->m_enter = 1;
+	}
+	else if (params->m_key == KEY_MENU) {
+		params->m_setup_change_state = 2;
+		params->m_door_mode = params->m_temp;
+		LCD_WriteLine(0, 16, "Saving...       ");
+		LCD_WriteLine(1, 16, "                ");
+	}
+
+	return currentState;
+}
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+uint8_t idleState(state_params_t *params)
+{
+	static uint8_t lastUpdate = 60;
 	rtc_time_t currentTime;
 
-	if (*enter) {
+	if (params->m_enter) {
+#ifdef CLOCK_SHOW_SECONDS
 		LCD_WriteLine(0, 16, "    --:--:--    ");
+#else
+		LCD_WriteLine(0, 16, "     --:--      ");
+#endif
 		LCD_WriteLine(1, 16, "     cooljc     ");
 		MotorStop();
-		*enter = 0;
+		params->m_enter = 0;
+		params->m_in_sub_menu = 0;
 	}
 
 	RTC_GetTime (&currentTime);
-	if (lastSec != currentTime.m_sec) {
+#ifdef CLOCK_SHOW_SECONDS
+	if (lastUpdate != currentTime.m_sec) {
 		LCD_WriteTime(currentTime);
-		lastSec = currentTime.m_sec;
+		lastUpdate = currentTime.m_sec;
 	}
+#else
+	if (lastUpdate != currentTime.m_min) {
+		LCD_WriteTime(currentTime);
+		lastUpdate = currentTime.m_min;
+	}
+#endif
 
-	if (key == KEY_MENU) {
-		return ST_TOP_MENU;
+	if (params->m_key == KEY_MENU) {
+		return ST_SETUP_MENU;
 	}
-	else if (key == KEY_OPEN) {
+	else if (params->m_key == KEY_OPEN) {
 		return ST_DOOR_OPENING;
 	}
-	else if (key == KEY_CLOSE) {
+	else if (params->m_key == KEY_CLOSE) {
 		return ST_DOOR_CLOSING;
 	}
 
@@ -144,68 +343,179 @@ uint8_t idleState(uint8_t key, uint8_t *enter)
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
-uint8_t topMenu(uint8_t key, uint8_t *enter)
+uint8_t setupMenu(state_params_t *params)
 {
-	if (*enter) {
-		LCD_WriteLine(0, 16, "== Door Setup ==");
-		LCD_WriteLine(1, 16, "  Press Menu    ");
-		*enter = 0;
+	if (params->m_enter) {
+		LCD_WriteLine(0, 16, "==    Setup   ==");
+		LCD_WriteLine(1, 16, "   Press Menu   ");
+		params->m_enter = 0;
+		params->m_in_sub_menu = 0;
 	}
 
-	if (key == KEY_MENU) {
+	if (params->m_key == KEY_MENU) {
 		return ST_SETUP_MENU_MODE;
 	}
-	return nextMenu(ST_TOP_MENU, key);
+	return nextTopMenu(ST_SETUP_MENU, params);
 }
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
-uint8_t exitMenu(uint8_t key, uint8_t *enter)
+uint8_t exitMenu(state_params_t *params)
 {
-	if (*enter) {
+	if (params->m_enter) {
 		LCD_WriteLine(0, 16, "==    Exit    ==");
-		LCD_WriteLine(1, 16, "  Press Menu    ");
-		*enter = 0;
+		LCD_WriteLine(1, 16, "   Press Menu   ");
+		params->m_enter = 0;
 	}
 
-	if (key == KEY_MENU) {
+	if (params->m_in_sub_menu == 1) {
+		if (params->m_key == KEY_MENU) {
+			params->m_in_sub_menu = 0;
+			return ST_SETUP_MENU;
+		}
+		return nextSubMenu(ST_EXIT_MENU, params);
+	}
+
+	if (params->m_key == KEY_MENU) {
 		return ST_IDLE;
 	}
-	return nextMenu(ST_EXIT_MENU, key);
+	return nextTopMenu(ST_EXIT_MENU, params);
 }
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
-uint8_t setupMenu_mode(uint8_t key, uint8_t *enter)
+uint8_t setupMenu_mode(state_params_t *params)
 {
-	if (*enter) {
+	if ((params->m_enter) && (params->m_setup_change_state == 0)) {
 		LCD_WriteLine(0, 16, "== Door Mode  ==");
-		LCD_WriteLine(1, 16, "  Press Menu    ");
-		*enter = 0;
+		LCD_WriteLine(1, 16, "   Press Menu   ");
+		params->m_enter = 0;
+		params->m_in_sub_menu = 1;
 	}
 
-	return nextMenu(ST_SETUP_MENU_MODE, key);
+	if (params->m_setup_change_state == 1) {
+		return SetModeValue(ST_SETUP_MENU_MODE, params);
+	}
+	else if (params->m_setup_change_state == 2) {
+		params->m_enter = 1;
+		params->m_setup_change_state = 0;
+		DS_SetAlarmMode(params->m_door_mode);
+		return ST_SETUP_MENU_MODE;
+	}
+
+	if (params->m_key == KEY_MENU) {
+		params->m_setup_change_state = 1;
+		params->m_enter = 1;
+		params->m_temp = params->m_door_mode;
+	}
+
+	return nextSubMenu(ST_SETUP_MENU_MODE, params);
 }
+
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
-uint8_t doorOpening(uint8_t key, uint8_t *enter)
+uint8_t setupMenu_clock(state_params_t *params)
 {
-	if (*enter) {
+	if ((params->m_enter) && (params->m_setup_change_state == 0)) {
+		LCD_WriteLine(0, 16, "== Set Clock  ==");
+		LCD_WriteLine(1, 16, "   Press Menu   ");
+		params->m_enter = 0;
+		params->m_in_sub_menu = 1;
+	}
+
+	if ((params->m_setup_change_state > 0) && (params->m_setup_change_state < 4)) {
+		return SetTimeValue(ST_SETUP_MENU_CLOCK, params);
+	}
+	else if (params->m_setup_change_state == 4) {
+		params->m_enter = 1;
+		params->m_setup_change_state = 0;
+	}
+
+	if (params->m_key == KEY_MENU) {
+		params->m_enter = 1;
+		params->m_setup_change_state = 1;
+		return ST_SETUP_MENU_CLOCK;
+	}
+
+	return nextSubMenu(ST_SETUP_MENU_CLOCK, params);
+}
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+uint8_t setupMenu_open_al(state_params_t *params)
+{
+	if ((params->m_enter) && (params->m_setup_change_state == 0)) {
+		LCD_WriteLine(0, 16, "=  Set Open AL =");
+		LCD_WriteLine(1, 16, "   Press Menu   ");
+		params->m_enter = 0;
+		params->m_in_sub_menu = 1;
+	}
+
+	if ((params->m_setup_change_state > 0) && (params->m_setup_change_state < 4)) {
+		return SetTimeValue(ST_SETUP_MENU_OPEN_AL, params);
+	}
+	else if (params->m_setup_change_state == 4) {
+		params->m_enter = 1;
+		params->m_setup_change_state = 0;
+	}
+
+	if (params->m_key == KEY_MENU) {
+		params->m_enter = 1;
+		params->m_setup_change_state = 1;
+		return ST_SETUP_MENU_OPEN_AL;
+	}
+
+	return nextSubMenu(ST_SETUP_MENU_OPEN_AL, params);
+}
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+uint8_t setupMenu_close_al(state_params_t *params)
+{
+	if ((params->m_enter) && (params->m_setup_change_state == 0)) {
+		LCD_WriteLine(0, 16, "= Set Close AL =");
+		LCD_WriteLine(1, 16, "   Press Menu   ");
+		params->m_enter = 0;
+		params->m_in_sub_menu = 1;
+	}
+
+	if ((params->m_setup_change_state > 0) && (params->m_setup_change_state < 4)) {
+		return SetTimeValue(ST_SETUP_MENU_CLOSE_AL, params);
+	}
+	else if (params->m_setup_change_state == 4) {
+		params->m_enter = 1;
+		params->m_setup_change_state = 0;
+	}
+
+	if (params->m_key == KEY_MENU) {
+		params->m_enter = 1;
+		params->m_setup_change_state = 1;
+		return ST_SETUP_MENU_CLOSE_AL;
+	}
+
+	return nextSubMenu(ST_SETUP_MENU_CLOSE_AL, params);
+}
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+uint8_t doorOpening(state_params_t *params)
+{
+	if (params->m_enter) {
 		LCD_WriteLine(0, 16, "Door Opening... ");
 		LCD_WriteLine(1, 16, "                ");
 		MotorStop();
 		MotorBackward();
-		*enter = 0;
+		params->m_enter = 0;
 	}
 
-	if (key == KEY_OPEN) {
+	if (params->m_key == KEY_OPEN) {
 		//return ST_IDLE;
 	}
-	else if (key == KEY_CLOSE) {
+	else if (params->m_key == KEY_CLOSE) {
 		return ST_IDLE;
 		//return ST_DOOR_CLOSING;
 	}
-	else if (key == KEY_DOOR_OPEN) {
+	else if (params->m_key == KEY_DOOR_OPEN) {
 		return ST_IDLE;
 	}
 
@@ -214,23 +524,23 @@ uint8_t doorOpening(uint8_t key, uint8_t *enter)
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
-uint8_t doorClosing(uint8_t key, uint8_t *enter)
+uint8_t doorClosing(state_params_t *params)
 {
-	if (*enter) {
+	if (params->m_enter) {
 		LCD_WriteLine(0, 16, "Door Closing... ");
 		LCD_WriteLine(1, 16, "                ");
 		MotorStop();
 		MotorForward();
-		*enter = 0;
+		params->m_enter = 0;
 	}
 
-	if (key == KEY_OPEN) {
+	if (params->m_key == KEY_OPEN) {
 		return ST_DOOR_OPENING;
 	}
-	else if (key == KEY_CLOSE) {
+	else if (params->m_key == KEY_CLOSE) {
 		return ST_IDLE;
 	}
-	else if (key == KEY_DOOR_CLOSED) {
+	else if (params->m_key == KEY_DOOR_CLOSED) {
 		return ST_IDLE;
 	}
 
@@ -243,7 +553,7 @@ void setDefaultTimes (void)
 {
 	rtc_time_t times;
 
-	times.m_hour = 12;
+	times.m_hour = 16;
 	times.m_min = 0;
 	times.m_sec = 0;
 	RTC_SetTime(&times);
@@ -262,11 +572,9 @@ int main (void)
 {
 	uint8_t state = ST_IDLE;
 	uint8_t nextstate = ST_IDLE;
-	uint8_t key = KEY_NONE;
-	uint8_t enterState = 1;
 	uint8_t alarm = RTC_ALARM_NONE;
 	func_p pStateFunc = states[state];
-
+	state_params_t params;
 
 	/* disable watchdog */
 	wdt_reset();
@@ -288,27 +596,36 @@ int main (void)
 
 	sei();
 
+	/* set params initial state */
+	params.m_enter = 1;
+	params.m_key = KEY_NONE;
+	params.m_top_menu_state = 0;
+	params.m_sub_menu_state = 0;
+	params.m_in_sub_menu = 0;
+	params.m_setup_change_state = 0;
+	DS_GetAlarmMode(&params.m_door_mode);
+
 	while (1)
 	{
 		/* get a key press or limit switch */
-		key = BUTTON_GetKey();
+		params.m_key = BUTTON_GetKey();
 
 		/* override key in favour of alarm */
 		alarm = RTC_TestAlarm();
 		if (alarm == RTC_ALARM_OPEN) {
-			key = KEY_OPEN;
+			params.m_key = KEY_OPEN;
 		}
-		else if (alarm == RTC_ALARM_CLOSE) {
-			key = KEY_CLOSE;
+		else if ((alarm == RTC_ALARM_CLOSE) && (params.m_door_mode == DOOR_MODE_OPEN_CLOSE)) {
+			params.m_key = KEY_CLOSE;
 		}
 
 		/* execute the current state function */
-		nextstate = pStateFunc(key, &enterState);
+		nextstate = pStateFunc(&params);
 
 		if (nextstate != state) {
 			pStateFunc = states[nextstate];
 			state = nextstate;
-			enterState = 1;
+			params.m_enter = 1;
 		}
 
 	} /* end of while(1) */
