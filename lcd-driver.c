@@ -29,8 +29,8 @@
 #include <avr/pgmspace.h>
 #include <inttypes.h>
 #include "rtc.h"
+#include "lcd-driver.h"
 
-//#include "lcd-driver.h"
 const char ascii[10] = "0123456789";
 
 /* ------------------------------------------------------------------ */
@@ -115,6 +115,7 @@ void LCD_Init(void)
 	/* clear screen */
 	lcd_write(0xFE);
 	lcd_write(0x01);
+	LCD_SetCursor(LCD_CURSOR_OFF);
 }
 
 /* ------------------------------------------------------------------ */
@@ -143,6 +144,7 @@ void LCD_WriteLine(uint8_t line, uint8_t len, char *str)
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
+#ifdef CLOCK_SHOW_SECONDS
 void LCD_WriteTime(rtc_time_t currentTime)
 {
 	uint8_t n1, n2;
@@ -155,7 +157,7 @@ void LCD_WriteTime(rtc_time_t currentTime)
 	lcd_write(ascii[n1]);
 	lcd_write(ascii[n2]);
 	lcd_write(':');
-	
+
 	// Minute
 	n1 = (currentTime.m_min / 10);
 	n2 = (currentTime.m_min % 10);
@@ -172,9 +174,75 @@ void LCD_WriteTime(rtc_time_t currentTime)
 	lcd_write(0xFE);
 	lcd_write(0x02); // return home
 }
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+void LCD_SetCursor(uint8_t state)
+{
+	lcd_write(0xFE);
+	if (state == LCD_CURSOR_HOUR) {
+		// set cursor to hour
+		lcd_write(0x0F);
+		lcd_write(0xFE);
+		lcd_write(0x84);
+	}
+	else if (state == LCD_CURSOR_MIN) {
+		// set cursot to minute
+		lcd_write(0x0F);
+		lcd_write(0xFE);
+		lcd_write(0x87);
+	}
+	else /* LCD_CURSOR_OFF */ {
+		// turn cursor off
+		lcd_write(0x0C);
+	}
+}
+#else
+void LCD_WriteTime(rtc_time_t currentTime)
+{
+	uint8_t n1, n2;
+	lcd_write(0xFE);
+	lcd_write(0x85); // move 4 chars before drawing clock
 
+	// -----xx:xx------
+	// Hour
+	n1 = (currentTime.m_hour / 10);
+	n2 = (currentTime.m_hour % 10);
+	lcd_write(ascii[n1]);
+	lcd_write(ascii[n2]);
+	lcd_write(':');
+
+	// Minute
+	n1 = (currentTime.m_min / 10);
+	n2 = (currentTime.m_min % 10);
+	lcd_write(ascii[n1]);
+	lcd_write(ascii[n2]);
+
+	lcd_write(0xFE);
+	lcd_write(0x02); // return home
+}
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
+void LCD_SetCursor(uint8_t state)
+{
+	lcd_write(0xFE);
+	if (state == LCD_CURSOR_HOUR) {
+		// set cursor to hour
+		lcd_write(0x0F);
+		lcd_write(0xFE);
+		lcd_write(0x85);
+	}
+	else if (state == LCD_CURSOR_MIN) {
+		// set cursot to minute
+		lcd_write(0x0F);
+		lcd_write(0xFE);
+		lcd_write(0x88);
+	}
+	else /* LCD_CURSOR_OFF */ {
+		// turn cursor off
+		lcd_write(0x0C);
+	}
+}
+#endif
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */

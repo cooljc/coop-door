@@ -27,8 +27,15 @@
 
 #include "rtc.h"
 
+enum {
+	LCD_CURSOR_OFF = 0,
+	LCD_CURSOR_HOUR,
+	LCD_CURSOR_MIN
+};
+
 void LCD_Init(void);
 void LCD_WriteLine(uint8_t line, uint8_t len, char *str);
 void LCD_WriteTime(rtc_time_t currentTime);
+void LCD_SetCursor(uint8_t state);
 
 #endif /* #ifndef _LCD_DRIVER_H */

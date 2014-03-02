@@ -160,6 +160,7 @@ CFLAGS += -Wa,-adhlns=$(<:%.c=$(OBJDIR)/%.lst)
 CFLAGS += $(patsubst %,-I%,$(EXTRAINCDIRS))
 CFLAGS += $(CSTANDARD)
 CFLAGS += -DAVRGCC 
+#CFLAGS += -DCLOCK_SHOW_SECONDS
 
 
 #---------------- Compiler Options C++ ----------------
