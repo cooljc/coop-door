@@ -29,7 +29,7 @@ enum {
 	KEY_OPEN,		/* Open Key */
 	KEY_CLOSE,		/* Close Key */
 	KEY_DOOR_OPEN,	/* Door Open Reed Switch */
-	KEY_DOOR_CLOSED,/* Door Closed Reed Switch */	
+	KEY_DOOR_CLOSED,/* Door Closed Reed Switch */
 	KEY_MENU		/* Menu Key */
 };
 
