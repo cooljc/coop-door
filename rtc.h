@@ -45,7 +45,8 @@ void RTC_GetTime (rtc_time_t *pime);
 void RTC_GetOpenTime (rtc_time_t *pTime);
 void RTC_GetCloseTime (rtc_time_t *pTime);
 
-uint8_t RTC_TestAlarm (void);
+uint8_t  RTC_TestAlarm (void);
+uint32_t RTC_GetSecondTick (void);
 
 #endif /* #ifndef _RTC_H */
 

@@ -30,6 +30,7 @@
 volatile rtc_time_t clock;
 volatile rtc_time_t alarm_open;
 volatile rtc_time_t alarm_close;
+volatile uint32_t secondTick;
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
@@ -120,6 +121,13 @@ uint8_t RTC_TestAlarm (void)
 	return RTC_ALARM_NONE;
 }
 
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+uint32_t RTC_GetSecondTick (void)
+{
+	return secondTick;
+}
+
 #define Led1Toggle()	(PIND |= (1 << PD2))
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
@@ -127,6 +135,7 @@ ISR(TIMER1_COMPA_vect)
 {
 	TCNT1 = 0;
 	clock.m_sec++;
+	secondTick++;
 	if (clock.m_sec == 60) {
 		clock.m_sec = 0;
 		clock.m_min++;
