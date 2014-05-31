@@ -37,5 +37,6 @@ void LCD_Init(void);
 void LCD_WriteLine(uint8_t line, uint8_t len, char *str);
 void LCD_WriteTime(rtc_time_t currentTime);
 void LCD_SetCursor(uint8_t state);
+void LCD_Off(void);
 
 #endif /* #ifndef _LCD_DRIVER_H */
