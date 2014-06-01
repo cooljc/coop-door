@@ -98,7 +98,7 @@ void button_change_interrupt(void)
 	key1 = button_read_keys();
 
 	/* Handle debounce!! */
-	_delay_ms(1);
+	_delay_ms(50);
 
 	/* read key again */
 	key2 = button_read_keys();
