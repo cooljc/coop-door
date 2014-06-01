@@ -33,7 +33,6 @@
 /* ------------------------------------------------------------------ */
 #include "wdt_drv.h"
 #include "common.h"
-//#include "timer0.h"
 #include "button-driver.h"
 #include "lcd-driver.h"
 #include "rtc.h"
@@ -58,14 +57,26 @@
 #define Led2Off()		(PORTD &= ~LED2)
 #define Led2Toggle()	(PIND |= LED2)
 
+#define USE_MOTOR_CHANNEL_B 1
+
 // Motor is on PORTD bit 3 and 5
+#ifndef USE_MOTOR_CHANNEL_B
 #define MA_1			(1 << PD3)
 #define MA_2			(1 << PD5)
 #define InitMotor()		(DDRD |= (MA_1 | MA_2))
 #define MotorStop()		(PORTD &= ~(MA_1 | MA_2))
+#define MotorBrake()	(PORTD |= (MA_1 | MA_2))
 #define MotorForward()	(PORTD |= MA_1)
 #define MotorBackward()	(PORTD |= MA_2)
-
+#else // USE_MOTOR_CHANNEL_B
+#define MB_1			(1 << PB1)
+#define MB_2			(1 << PD6)
+#define InitMotor()		DDRD |= MB_2; DDRB |= MB_1
+#define MotorStop()		PORTD &= ~(MB_2); PORTB &= ~(MB_1)
+#define MotorBrake()	PORTD |= MB_2; PORTB |= MB_1
+#define MotorForward()	(PORTB |= MB_1)
+#define MotorBackward()	(PORTD |= MB_2)
+#endif
 
 typedef struct {
 	uint8_t 	m_enter;
