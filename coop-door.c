@@ -86,14 +86,27 @@ typedef struct {
 	uint8_t 	m_in_sub_menu;
 	uint8_t 	m_setup_change_state;
 	uint8_t		m_door_mode;
+	uint8_t		m_door_state;
+	uint8_t		m_menu_timeout;
 	uint8_t		m_temp;
+	uint8_t		m_open_sw_inhibit;
 	rtc_time_t 	m_time;
 } state_params_t;
+
+enum {
+	DOOR_STATE_UNKNOWN = 0,
+	DOOR_STATE_CLOSED,
+	DOOR_STATE_CLOSING,
+	DOOR_STATE_OPEN,
+	DOOR_STATE_OPENING,
+	DOOR_STATE_ERROR,
+};
 
 typedef uint8_t (*func_p)(state_params_t *);
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 uint8_t idleState(state_params_t *params);
+uint8_t idleStateError(state_params_t *params);
 uint8_t setupMenu(state_params_t *params);
 uint8_t exitMenu(state_params_t *params);
 uint8_t setupMenu_mode(state_params_t *params);
@@ -105,6 +118,7 @@ uint8_t doorClosing(state_params_t *params);
 
 enum {
 	ST_IDLE = 0,
+	ST_IDLE_ERROR,
 	ST_SETUP_MENU,
 	ST_EXIT_MENU,
 	ST_SETUP_MENU_MODE,
@@ -118,6 +132,7 @@ enum {
 
 /* must match states above */
 func_p states[ST_MAX] = {idleState,
+						idleStateError,
 						setupMenu,
 						exitMenu,
 						setupMenu_mode,
@@ -324,15 +339,18 @@ uint8_t idleState(state_params_t *params)
 		MotorStop();
 		params->m_enter = 0;
 		params->m_in_sub_menu = 0;
+		lastUpdate = 60;
 	}
 
-	RTC_GetTime (&currentTime);
+
 #ifdef CLOCK_SHOW_SECONDS
-	if (lastUpdate != currentTime.m_sec) {
+	if (lastUpdate != RTC_GetSecondTick()) {
+		RTC_GetTime (&currentTime);
 		LCD_WriteTime(currentTime);
-		lastUpdate = currentTime.m_sec;
+		lastUpdate = RTC_GetSecondTick();
 	}
 #else
+	RTC_GetTime (&currentTime);
 	if (lastUpdate != currentTime.m_min) {
 		LCD_WriteTime(currentTime);
 		lastUpdate = currentTime.m_min;
@@ -350,6 +368,24 @@ uint8_t idleState(state_params_t *params)
 	}
 
 	return ST_IDLE;
+}
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+uint8_t idleStateError(state_params_t *params)
+{
+	if (params->m_enter) {
+		MotorStop();
+		params->m_enter = 0;
+		params->m_in_sub_menu = 0;
+		// close error
+		LCD_WriteLine(0, 16, "Door Close Error");
+		LCD_WriteLine(1, 16, "Check for dirt! ");
+	}
+	if (params->m_key == KEY_OPEN) {
+		return ST_DOOR_OPENING;
+	}
+	return ST_IDLE_ERROR;
 }
 
 /* ------------------------------------------------------------------ */
@@ -511,22 +547,46 @@ uint8_t setupMenu_close_al(state_params_t *params)
 /* ------------------------------------------------------------------ */
 uint8_t doorOpening(state_params_t *params)
 {
+	// check if door is already open. If so return to idle state.
+	if (params->m_door_state == DOOR_STATE_OPEN) {
+		return ST_IDLE;
+	}
+
 	if (params->m_enter) {
 		LCD_WriteLine(0, 16, "Door Opening... ");
 		LCD_WriteLine(1, 16, "                ");
 		MotorStop();
 		MotorBackward();
 		params->m_enter = 0;
+		if (params->m_door_state == DOOR_STATE_ERROR) {
+			// door is in error state so it needs to be opened to put the
+			// spool in the correct winding. This means we need to inhibit
+			// the door open switch for a short time to allow it to open.
+			params->m_open_sw_inhibit = RTC_GetSecondTick() + 2;
+		}
+		else {
+			params->m_open_sw_inhibit = 0;
+		}
+		params->m_door_state = DOOR_STATE_OPENING;
 	}
 
-	if (params->m_key == KEY_OPEN) {
-		//return ST_IDLE;
+	if (params->m_open_sw_inhibit != 0 && params->m_open_sw_inhibit > RTC_GetSecondTick()) {
+		return ST_DOOR_OPENING;
 	}
-	else if (params->m_key == KEY_CLOSE) {
-		return ST_IDLE;
-		//return ST_DOOR_CLOSING;
+	else {
+		params->m_open_sw_inhibit = 0 ;
 	}
-	else if (params->m_key == KEY_DOOR_OPEN) {
+
+	if ((params->m_key == KEY_DOOR_OPEN) || (params->m_key == KEY_MENU)){
+		MotorBrake();
+		if (params->m_key == KEY_DOOR_OPEN) {
+			// only set state to open if open limit switch is hit
+			params->m_door_state = DOOR_STATE_OPEN;
+		}
+		else {
+			// door stopped during open cycle. Now we are in unknown state
+			params->m_door_state = DOOR_STATE_UNKNOWN;
+		}
 		return ST_IDLE;
 	}
 
@@ -537,22 +597,41 @@ uint8_t doorOpening(state_params_t *params)
 /* ------------------------------------------------------------------ */
 uint8_t doorClosing(state_params_t *params)
 {
+	// check if door is already closed. If so return to idle state.
+	if (params->m_door_state == DOOR_STATE_CLOSED || params->m_door_state == DOOR_STATE_ERROR) {
+		return ST_IDLE;
+	}
 	if (params->m_enter) {
 		LCD_WriteLine(0, 16, "Door Closing... ");
 		LCD_WriteLine(1, 16, "                ");
 		MotorStop();
 		MotorForward();
 		params->m_enter = 0;
+		params->m_door_state = DOOR_STATE_CLOSING;
+		// we want to inhibit open switch for 5 seconds.
+		params->m_open_sw_inhibit = RTC_GetSecondTick() + 5;
 	}
 
-	if (params->m_key == KEY_OPEN) {
-		return ST_DOOR_OPENING;
-	}
-	else if (params->m_key == KEY_CLOSE) {
+	if ((params->m_key == KEY_DOOR_CLOSED) || (params->m_key == KEY_MENU)) {
+		MotorBrake();
+		if (params->m_key == KEY_DOOR_CLOSED) {
+			// only set state to closed if door closed limit swith is hit
+			params->m_door_state = DOOR_STATE_CLOSED;
+		}
+		else {
+			// has been stopped by menu key so it might be between states
+			params->m_door_state = DOOR_STATE_UNKNOWN;
+		}
 		return ST_IDLE;
 	}
-	else if (params->m_key == KEY_DOOR_CLOSED) {
-		return ST_IDLE;
+	else if (params->m_key == KEY_DOOR_OPEN && params->m_open_sw_inhibit <= RTC_GetSecondTick()) {
+		// this is a special case where the bottom of the door is blocked by dirt and the
+		// motor has fully unwound and starts opening the door again. We need to stop the
+		// motor when it gets to the open switch to stop it buring out.
+		MotorBrake();
+		// set Door state to Error!!
+		params->m_door_state = DOOR_STATE_ERROR;
+		return ST_IDLE_ERROR;
 	}
 
 	return ST_DOOR_CLOSING;
@@ -614,6 +693,7 @@ int main (void)
 	params.m_sub_menu_state = 0;
 	params.m_in_sub_menu = 0;
 	params.m_setup_change_state = 0;
+	params.m_door_state = DOOR_STATE_UNKNOWN;
 	DS_GetAlarmMode(&params.m_door_mode);
 
 	while (1)
@@ -637,6 +717,19 @@ int main (void)
 			pStateFunc = states[nextstate];
 			state = nextstate;
 			params.m_enter = 1;
+			// set timeout for menus
+			params.m_menu_timeout = RTC_GetSecondTick() + 20;
+		}
+		else {
+			// no change in state..
+			// check if we are in a menu with no activity.
+			if (state >= ST_SETUP_MENU && state <= ST_SETUP_MENU_CLOSE_AL) {
+				if (params.m_menu_timeout <= RTC_GetSecondTick()) {
+					pStateFunc = states[ST_IDLE];
+					state = ST_IDLE;
+					params.m_enter = 1;
+				}
+			}
 		}
 
 	} /* end of while(1) */
