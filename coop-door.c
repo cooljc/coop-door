@@ -87,7 +87,7 @@ typedef struct {
 	uint8_t 	m_setup_change_state;
 	uint8_t		m_door_mode;
 	uint8_t		m_door_state;
-	uint8_t		m_menu_timeout;
+	uint32_t	m_menu_timeout;
 	uint8_t		m_temp;
 	uint8_t		m_open_sw_inhibit;
 	rtc_time_t 	m_time;
@@ -707,6 +707,10 @@ int main (void)
 			/* only allow open/menu/close to be included in last key */
 			if (key == KEY_OPEN || key == KEY_MENU || key == KEY_CLOSE || key == KEY_NONE) {
 				lastKey = key;
+				if (state >= ST_SETUP_MENU && state <= ST_SETUP_MENU_CLOSE_AL) {
+					/* check last key press. if different reset timeout */
+					params.m_menu_timeout = RTC_GetSecondTick() + 20;
+				}
 			}
 		}
 		else {
