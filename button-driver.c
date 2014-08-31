@@ -25,7 +25,9 @@
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 #include <avr/io.h>
+#ifdef USE_INTERRUPT
 #include <avr/interrupt.h>
+#endif /* #ifdef USE_INTERRUPT */
 #include <avr/pgmspace.h>
 #include <util/delay.h>
 #include <inttypes.h>
@@ -33,8 +35,10 @@
 #include "common.h"
 #include "button-driver.h"
 
+#ifdef USE_INTERRUPT
 volatile uint8_t KEY = KEY_NONE;
 volatile bool KEY_VALID = FALSE;
+#endif /* #ifdef USE_INTERRUPT */
 
 /* ------------------------------------------------------------------ *
  *
@@ -63,13 +67,13 @@ uint8_t button_read_keys (void)
 
 	/* check buttons */
 	if (buttons & (1<<PINC1)) {
-		key = KEY_OPEN;
+		key |= KEY_OPEN;
 	}
 	else if (buttons & (1<<PINC3)) {
-		key = KEY_CLOSE;
+		key |= KEY_CLOSE;
 	}
 	else if (buttons & (1<<PINC4)) {
-		key = KEY_MENU;
+		key |= KEY_MENU;
 	}
 	else if (portd & (1<<PIND2)) {
 		// Test 1
@@ -78,15 +82,16 @@ uint8_t button_read_keys (void)
 		// Test 2
 	}
 	else if (portd & (1<<PIND7)) {
-		key = KEY_DOOR_CLOSED;
+		key |= KEY_DOOR_CLOSED;
 	}
 	else if (portb & (1<<PINB0)) {
-		key = KEY_DOOR_OPEN;
+		key |= KEY_DOOR_OPEN;
 	}
 
 	return key;
 }
 
+#ifdef USE_INTERRUPT
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 void button_change_interrupt(void)
@@ -134,6 +139,7 @@ ISR(PCINT2_vect)
 {
     button_change_interrupt();
 }
+#endif /* #ifdef USE_INTERRUPT */
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
@@ -147,6 +153,7 @@ void BUTTON_Init(void)
 	DDRD &= ~(PIND_MASK);
 	PORTD |= PIND_MASK;
 
+#ifdef USE_INTERRUPT
 	/* setup interrupts */
 	PCMSK0 |= (1<<PCINT0);
 	PCMSK1 |= ((1<<PCINT9) | (1<<PCINT11) | (1<<PCINT12));
@@ -154,6 +161,7 @@ void BUTTON_Init(void)
 
 	PCIFR = (1<<PCIF2) | (1<<PCIF1) | (1<<PCIF0);
 	PCICR = (1<<PCIE2) | (1<<PCIE1) | (1<<PCIE0);
+#endif /* #ifdef USE_INTERRUPT */
 }
 
 /* ------------------------------------------------------------------ */
@@ -161,7 +169,7 @@ void BUTTON_Init(void)
 uint8_t BUTTON_GetKey(void)
 {
 	uint8_t k = KEY_NONE;
-
+#ifdef USE_INTERRUPT
     cli();
 
 	/* check for unread key in buffer */
@@ -171,6 +179,23 @@ uint8_t BUTTON_GetKey(void)
     }
 
     sei();
+#else
+	uint8_t	key1 = KEY_NONE;
+	uint8_t key2 = KEY_NONE;
+
+	/* read key */
+	key1 = button_read_keys();
+
+	/* Handle debounce!! */
+	_delay_ms(50);
+
+	/* read key again */
+	key2 = button_read_keys();
+
+	if ((key1 == key2) && (key1 != KEY_NONE)) {
+		k = key1;
+	}
+#endif /* #ifdef USE_INTERRUPT */
 
 	return k;
 }

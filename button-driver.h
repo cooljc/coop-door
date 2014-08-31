@@ -25,12 +25,12 @@
 
 /* available keys */
 enum {
-	KEY_NONE = 0,
-	KEY_OPEN,		/* Open Key */
-	KEY_CLOSE,		/* Close Key */
-	KEY_DOOR_OPEN,	/* Door Open Reed Switch */
-	KEY_DOOR_CLOSED,/* Door Closed Reed Switch */
-	KEY_MENU		/* Menu Key */
+	KEY_NONE        = 0x00,
+	KEY_OPEN        = 0x01,	/* Open Key */
+	KEY_CLOSE       = 0x02,	/* Close Key */
+	KEY_DOOR_OPEN   = 0x04,	/* Door Open Reed Switch */
+	KEY_DOOR_CLOSED = 0x08, /* Door Closed Reed Switch */
+	KEY_MENU		= 0x10  /* Menu Key */
 };
 
 /* Public Functions */

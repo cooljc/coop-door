@@ -663,6 +663,8 @@ int main (void)
 	uint8_t state = ST_IDLE;
 	uint8_t nextstate = ST_IDLE;
 	uint8_t alarm = RTC_ALARM_NONE;
+	uint8_t key = KEY_NONE;
+	uint8_t lastKey = KEY_NONE;
 	func_p pStateFunc = states[state];
 	state_params_t params;
 
@@ -699,7 +701,18 @@ int main (void)
 	while (1)
 	{
 		/* get a key press or limit switch */
-		params.m_key = BUTTON_GetKey();
+		key = BUTTON_GetKey();
+		if (key != lastKey) {
+			params.m_key = key;
+			/* only allow open/menu/close to be included in last key */
+			if (key == KEY_OPEN || key == KEY_MENU || key == KEY_CLOSE || key == KEY_NONE) {
+				lastKey = key;
+			}
+		}
+		else {
+			/* prevents key from triggering if it is held down */
+			params.m_key = KEY_NONE;
+		}
 
 		/* override key in favour of alarm */
 		alarm = RTC_TestAlarm();
