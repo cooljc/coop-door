@@ -23,6 +23,15 @@
 #ifndef _RTC_H
 #define _RTC_H
 
+#ifdef DS1307_BOARD
+typedef struct {
+	uint8_t m_dayNumber; /* 1 = Sunday */
+	uint8_t m_day;
+	uint8_t m_month;
+	uint8_t m_year;
+} rtc_date_t;
+#endif /* #ifdef DS1307_BOARD */
+
 typedef struct {
 	uint8_t	m_hour;
 	uint8_t m_min;
@@ -36,17 +45,21 @@ enum {
 };
 
 void RTC_Init (void);
-
+void RTC_SyncTime (void);
 void RTC_SetTime (rtc_time_t *newTime);
 void RTC_SetOpenTime (rtc_time_t *newTime);
 void RTC_SetCloseTime (rtc_time_t *newTime);
-
 void RTC_GetTime (rtc_time_t *pime);
 void RTC_GetOpenTime (rtc_time_t *pTime);
 void RTC_GetCloseTime (rtc_time_t *pTime);
 
 uint8_t  RTC_TestAlarm (void);
 uint32_t RTC_GetSecondTick (void);
+
+#ifdef DS1307_BOARD
+void RTC_SetDate (rtc_date_t *newDate);
+void RTC_GetDate (rtc_date_t *date);
+#endif
 
 #endif /* #ifndef _RTC_H */
 

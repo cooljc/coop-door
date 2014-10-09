@@ -26,11 +26,87 @@
 
 #include "common.h"
 #include "rtc.h"
+#ifdef DS1307_BOARD
+#include "i2cmaster.h"
+#endif /* #ifdef DS1307_BOARD */
 
 volatile rtc_time_t clock;
 volatile rtc_time_t alarm_open;
 volatile rtc_time_t alarm_close;
 volatile uint32_t secondTick;
+
+#ifdef DS1307_BOARD
+#define RTC_SLAVE_ADDR 0xD0
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+static uint8_t rtc_bcd2dec (uint8_t bcd)
+{
+	uint8_t cnt, ten = 1;
+	uint8_t dec = 0;
+
+	for (cnt = 0; cnt < 2 && bcd != 0; cnt++)
+	{
+		dec += (bcd & 0x0F) * ten;
+		bcd >>= 4;
+		ten *= 10;
+	}
+	return (dec);
+}
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+static uint8_t rtc_dec2bcd (uint8_t dec)
+{
+	uint8_t bcd, shift;
+
+	bcd = 0;
+	shift = 0;
+
+	while (dec > 0 )
+	{
+		bcd += (dec % 10) << shift;
+		dec /= 10;
+		shift += 4;
+	}
+	return bcd;
+}
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+static void rtc_getTimeFromRTC (rtc_time_t *newTime)
+{
+	uint8_t data[3];
+	i2c_start (RTC_SLAVE_ADDR|I2C_WRITE);
+	i2c_write (0x00);
+	i2c_rep_start (RTC_SLAVE_ADDR|I2C_READ); /* set READ bit */
+	data[0] = i2c_readAck();
+	data[1] = i2c_readAck();
+	data[2] = i2c_readNak();
+	i2c_stop ();
+	
+	newTime->m_sec  = rtc_bcd2dec( (data[0] & 0x7f) );
+	newTime->m_min  = rtc_bcd2dec( (data[1] & 0x7f) );
+	newTime->m_hour = rtc_bcd2dec( (data[2] & 0x3f) );
+}
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+static void rtc_writeTimeToRTC (rtc_time_t *newTime)
+{
+	uint8_t data[4];
+	data[0] = 0x00; /* sets the first address*/
+	data[1] = (rtc_dec2bcd(newTime->m_sec) & 0x7f);
+	data[2] = (rtc_dec2bcd(newTime->m_min) & 0x7f);
+	data[3] = (rtc_dec2bcd(newTime->m_hour) & 0x3f) | 0x40; /* set 24hr mode */
+	
+	i2c_start (RTC_SLAVE_ADDR|I2C_WRITE);
+	i2c_write (data[0]);
+	i2c_write (data[1]);
+	i2c_write (data[2]);
+	i2c_write (data[3]);
+	i2c_stop ();
+}
+#endif /* DS1307_BOARD */
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
@@ -49,12 +125,31 @@ void RTC_Init (void)
 	TIMSK1 = 0x02; //output compare A match interrupt enable
 
 	TCNT1 = 0;
+
+	RTC_SyncTime ();
 }
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+void RTC_SyncTime (void)
+{
+#ifdef DS1307_BOARD
+	rtc_time_t newTime;
+	rtc_getTimeFromRTC (&newTime);
+	clock.m_sec = newTime.m_sec;
+	clock.m_min = newTime.m_min;
+	clock.m_hour = newTime.m_hour;
+#endif /* #ifdef DS1307_BOARD */
+}
+
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 void RTC_SetTime (rtc_time_t *newTime)
 {
+#ifdef DS1307_BOARD
+	rtc_writeTimeToRTC (newTime);
+#endif /* #ifdef DS1307_BOARD */
 	clock.m_sec = newTime->m_sec;
 	clock.m_min = newTime->m_min;
 	clock.m_hour = newTime->m_hour;
@@ -127,6 +222,50 @@ uint32_t RTC_GetSecondTick (void)
 {
 	return secondTick;
 }
+
+#ifdef DS1307_BOARD
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+void RTC_SetDate (rtc_date_t *newDate)
+{
+	uint8_t data[5];
+	
+	data[0] = 0x03; /* set register to DAY */
+	data[1] = (rtc_dec2bcd(newDate->m_dayNumber) & 0x07);
+	data[2] = (rtc_dec2bcd(newDate->m_day) & 0x3f);
+	data[3] = (rtc_dec2bcd(newDate->m_month) & 0x1f);
+	data[4] = (rtc_dec2bcd(newDate->m_year) & 0xff);
+	
+	i2c_start (RTC_SLAVE_ADDR|I2C_WRITE);
+	i2c_write (data[0]);
+	i2c_write (data[1]);
+	i2c_write (data[2]);
+	i2c_write (data[3]);
+	i2c_write (data[4]);
+	i2c_stop ();
+}
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+void RTC_GetDate (rtc_date_t *date)
+{
+	uint8_t data[4];
+	
+	i2c_start (RTC_SLAVE_ADDR|I2C_WRITE);
+	i2c_write (0x03); /* set register to DAY */
+	i2c_rep_start (RTC_SLAVE_ADDR|I2C_READ); /* set READ bit */
+	data[0] = i2c_readAck();
+	data[1] = i2c_readAck();
+	data[2] = i2c_readAck();
+	data[3] = i2c_readNak();
+	i2c_stop ();
+	
+	date->m_dayNumber = rtc_bcd2dec( (data[0] & 0x07) );
+	date->m_day       = rtc_bcd2dec( (data[1] & 0x3f) );
+	date->m_month     = rtc_bcd2dec( (data[2] & 0x1f) );
+	date->m_year      = rtc_bcd2dec( (data[3] & 0xff) );
+}
+#endif
 
 #define Led1Toggle()	(PIND |= (1 << PD2))
 /* ------------------------------------------------------------------ */
