@@ -30,7 +30,11 @@
 enum {
 	LCD_CURSOR_OFF = 0,
 	LCD_CURSOR_HOUR,
-	LCD_CURSOR_MIN
+	LCD_CURSOR_MIN,
+	LCD_CURSOR_DAYNAME,
+	LCD_CURSOR_DAY,
+	LCD_CURSOR_MONTH,
+	LCD_CURSOR_YEAR
 };
 
 void LCD_Init(void);
@@ -38,5 +42,9 @@ void LCD_WriteLine(uint8_t line, uint8_t len, char *str);
 void LCD_WriteTime(rtc_time_t currentTime);
 void LCD_SetCursor(uint8_t state);
 void LCD_Off(void);
+void LCD_SetBacklight(uint8_t onNotOff);
+#ifdef DS1307_BOARD
+void LCD_WriteDate(rtc_date_t currentDate);
+#endif /* #ifdef DS1307_BOARD */
 
 #endif /* #ifndef _LCD_DRIVER_H */
