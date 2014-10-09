@@ -43,21 +43,41 @@
 # Target file name (without extension).
 TARGET = coop-door
 
+# New Coop Door (Leonardo)
+LEONARDO_BOARD = 1
+# Original Coop Door
+#POP168_BOARD = 1
 
 # List C source files here. (C dependencies are automatically generated.)
 SRC =	$(TARGET).c 	 \
-		button-driver.c  \
-		lcd-driver.c \
 		rtc.c \
 		data-store.c
 
+# Original Coop Door
+ifdef POP168_BOARD
+SRC += lcd_driver.c button-driver.c
+endif
+
+# New Coop Door (Leonardo)
+ifdef LEONARDO_BOARD
+SRC += lcd_drive_i2c.c twimaster.c button-driver-leonardo.c
+endif
 
 # MCU name, Teensy has at90usb162, Teensy++ has at90usb646
 # type "make clean" after changing this, so all files will be rebuilt
 #MCU = at90usb162
 #MCU = at90usb646
-MCU = atmega168
 #MCU = atmega88
+
+# Original Coop Door
+ifdef POP168_BOARD
+MCU = atmega168
+endif
+
+# New Coop Door (Leonardo)
+ifdef LEONARDO_BOARD
+MCU = atmega32u4
+endif
 
 # Processor frequency.
 #     This will define a symbol, F_CPU, in all source code files equal to the 
@@ -160,8 +180,17 @@ CFLAGS += -Wa,-adhlns=$(<:%.c=$(OBJDIR)/%.lst)
 CFLAGS += $(patsubst %,-I%,$(EXTRAINCDIRS))
 CFLAGS += $(CSTANDARD)
 CFLAGS += -DAVRGCC 
-#CFLAGS += -DCLOCK_SHOW_SECONDS
+CFLAGS += -DCLOCK_SHOW_SECONDS
 
+# Build flags for Leonardo board (new controller)
+ifdef LEONARDO_BOARD
+CFLAGS += -DLEONARDO_BOARD
+CFLAGS += -DDS1307_BOARD
+endif
+# Build flags for POP168 board (old controller)
+ifdef POP168_BOARD
+CFLAGS += -DPOP168_BOARD
+endif
 
 #---------------- Compiler Options C++ ----------------
 #  -g*:          generate debugging information
@@ -273,14 +302,15 @@ DFUPROG = dfu-programmer
 # to get a full listing.
 #
 #AVRDUDE_PROGRAMMER = stk500
-AVRDUDE_PROGRAMMER = avrisp
+#AVRDUDE_PROGRAMMER = avrisp
 #AVRDUDE_PROGRAMMER = avrisp2
 #AVRDUDE_PROGRAMMER = jtag2dw
+AVRDUDE_PROGRAMMER = avr109
 
 # com1 = serial port. Use lpt1 to connect to parallel port.
-AVRDUDE_PORT = /dev/ttyUSB0    # programmer connected to serial device
+AVRDUDE_PORT = /dev/ttyACM0    # programmer connected to serial device
 #AVRDUDE_PORT = usb
-AVRDUDE_SPEED = -b 19200
+#AVRDUDE_SPEED = -b 19200
 
 AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
 #AVRDUDE_WRITE_EEPROM = -U eeprom:w:$(TARGET).eep
