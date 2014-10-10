@@ -125,8 +125,6 @@ void RTC_Init (void)
 	TIMSK1 = 0x02; //output compare A match interrupt enable
 
 	TCNT1 = 0;
-
-	RTC_SyncTime ();
 }
 
 /* ------------------------------------------------------------------ */
