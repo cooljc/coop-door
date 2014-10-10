@@ -896,6 +896,12 @@ int main (void)
 	func_p pStateFunc = states[state];
 	state_params_t params;
 
+#ifdef LEONARDO_BOARD
+	/* disable USB controller */
+	UHWCON = 0x00;
+	USBCON = 0x20;
+#endif /* #ifdef LEONARDO_BOARD */
+
 	/* disable watchdog */
 	wdt_reset();
 	Wdt_clear_flag();
