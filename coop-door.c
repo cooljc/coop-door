@@ -126,6 +126,10 @@ typedef struct {
 	uint32_t	m_menu_timeout;
 	uint8_t		m_temp;
 	uint8_t		m_open_sw_inhibit;
+#ifdef LEONARDO_BOARD
+	uint8_t		m_lcdBacklight_timeout;
+	uint32_t	m_lcdBacklight_timeout_count;
+#endif /* #ifdef LEONARDO_BOARD */
 #ifdef DS1307_BOARD
 	uint8_t		m_lastHour;
 	uint8_t		m_lastDay;
@@ -935,6 +939,10 @@ int main (void)
 	params.m_in_sub_menu = 0;
 	params.m_setup_change_state = 0;
 	params.m_door_state = DOOR_STATE_UNKNOWN;
+#ifdef LEONARDO_BOARD
+	params.m_lcdBacklight_timeout = 30;
+	params.m_lcdBacklight_timeout_count = RTC_GetSecondTick() + params.m_lcdBacklight_timeout;
+#endif /* #ifdef LEONARDO_BOARD */
 #ifdef DS1307_BOARD
 	params.m_lastHour = 24;
 	params.m_lastDay = 8;
@@ -954,6 +962,13 @@ int main (void)
 					/* check last key press. if different reset timeout */
 					params.m_menu_timeout = RTC_GetSecondTick() + 20;
 				}
+#ifdef LEONARDO_BOARD
+				params.m_lcdBacklight_timeout_count = RTC_GetSecondTick() + params.m_lcdBacklight_timeout;
+				if (LCD_GetBacklight() == 0) {
+					LCD_SetBacklight (1);
+					params.m_key = KEY_NONE;
+				}
+#endif /* #ifdef LEONARDO_BOARD */
 			}
 		}
 		else {
@@ -990,6 +1005,13 @@ int main (void)
 					params.m_enter = 1;
 				}
 			}
+#ifdef LEONARDO_BOARD
+			// backlight turn off
+			if (params.m_lcdBacklight_timeout_count <= RTC_GetSecondTick())
+			{
+				LCD_SetBacklight(0);
+			}
+#endif /* #ifdef LEONARDO_BOARD */
 		}
 
 	} /* end of while(1) */

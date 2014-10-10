@@ -193,10 +193,19 @@ void LCD_WriteLine(uint8_t line, uint8_t len, char *str)
 void LCD_SetBacklight(uint8_t onNotOff)
 {
 	uint8_t byte = 0;
-	backlight = onNotOff;
-	if (onNotOff)
-		byte = (1 << BL);
-	lcd_write_ioex (byte);
+	if (backlight != onNotOff) {
+		backlight = onNotOff;
+		if (onNotOff)
+			byte = (1 << BL);
+		lcd_write_ioex (byte);
+	}
+}
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+uint8_t LCD_GetBacklight (void)
+{
+	return backlight;
 }
 
 /* ------------------------------------------------------------------ */

@@ -43,6 +43,7 @@ void LCD_WriteTime(rtc_time_t currentTime);
 void LCD_SetCursor(uint8_t state);
 void LCD_Off(void);
 void LCD_SetBacklight(uint8_t onNotOff);
+uint8_t LCD_GetBacklight (void);
 #ifdef DS1307_BOARD
 void LCD_WriteDate(rtc_date_t currentDate);
 #endif /* #ifdef DS1307_BOARD */
