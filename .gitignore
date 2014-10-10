@@ -16,3 +16,13 @@
 *.exe
 *.out
 *.app
+
+# AVR GCC files
+*.eep
+*.elf
+*.hex
+*.lss
+*.lst
+*.map
+*.sym
+.dep
