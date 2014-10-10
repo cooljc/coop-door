@@ -117,9 +117,7 @@
 typedef struct {
 	uint8_t 	m_enter;
 	uint8_t 	m_key;
-	uint8_t 	m_top_menu_state;
-	uint8_t 	m_sub_menu_state;
-	uint8_t 	m_in_sub_menu;
+	uint8_t 	m_menu_state;
 	uint8_t 	m_setup_change_state;
 	uint8_t		m_door_mode;
 	uint8_t		m_door_state;
@@ -196,24 +194,21 @@ func_p states[ST_MAX] = {idleState,
 						doorOpening,
 						doorClosing};
 
-#define TOP_MENU_STATE_MAX 2
-uint8_t top_menu_states[TOP_MENU_STATE_MAX] = {ST_SETUP_MENU, ST_EXIT_MENU};
-
 #ifdef DS1307_BOARD
-#define SUB_MENU_STATE_MAX 6
-uint8_t sub_menu_states[SUB_MENU_STATE_MAX] = {ST_SETUP_MENU_MODE,
-											   ST_SETUP_MENU_CLOCK,
-											   ST_SETUP_MENU_DATE,
-											   ST_SETUP_MENU_OPEN_AL,
-											   ST_SETUP_MENU_CLOSE_AL,
-											   ST_EXIT_MENU};
+#define MENU_STATE_MAX 6
+uint8_t menu_states[MENU_STATE_MAX] = {ST_EXIT_MENU,
+									   ST_SETUP_MENU_MODE,
+									   ST_SETUP_MENU_CLOCK,
+									   ST_SETUP_MENU_DATE,
+									   ST_SETUP_MENU_OPEN_AL,
+									   ST_SETUP_MENU_CLOSE_AL};
 #else
-#define SUB_MENU_STATE_MAX 5
-uint8_t sub_menu_states[SUB_MENU_STATE_MAX] = {ST_SETUP_MENU_MODE,
-											   ST_SETUP_MENU_CLOCK,
-											   ST_SETUP_MENU_OPEN_AL,
-											   ST_SETUP_MENU_CLOSE_AL,
-											   ST_EXIT_MENU};
+#define MENU_STATE_MAX 5
+uint8_t menu_states[MENU_STATE_MAX] = {ST_EXIT_MENU,
+									   ST_SETUP_MENU_MODE,
+									   ST_SETUP_MENU_CLOCK,
+									   ST_SETUP_MENU_OPEN_AL,
+									   ST_SETUP_MENU_CLOSE_AL};
 #endif /* #ifdef DS1307_BOARD */
 
 /* ------------------------------------------------------------------ */
@@ -222,44 +217,22 @@ uint8_t sub_menu_states[SUB_MENU_STATE_MAX] = {ST_SETUP_MENU_MODE,
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
-uint8_t nextTopMenu(uint8_t currentState, state_params_t *params)
+uint8_t nextMenu(uint8_t currentState, state_params_t *params)
 {
 	uint8_t retState = currentState;
 	if (params->m_key == KEY_OPEN) {
-		params->m_top_menu_state++;
-		if (params->m_top_menu_state == TOP_MENU_STATE_MAX) {
-			params->m_top_menu_state = 0;
+		params->m_menu_state++;
+		if (params->m_menu_state == MENU_STATE_MAX) {
+			params->m_menu_state = 0;
 		}
-		retState = top_menu_states[params->m_top_menu_state];
+		retState = menu_states[params->m_menu_state];
 	}
 	else if (params->m_key == KEY_CLOSE) {
-		params->m_top_menu_state--;
-		if (params->m_top_menu_state == 255) {
-			params->m_top_menu_state = TOP_MENU_STATE_MAX-1;
+		params->m_menu_state--;
+		if (params->m_menu_state == 255) {
+			params->m_menu_state = MENU_STATE_MAX-1;
 		}
-		retState = top_menu_states[params->m_top_menu_state];
-	}
-	return retState;
-}
-
-/* ------------------------------------------------------------------ */
-/* ------------------------------------------------------------------ */
-uint8_t nextSubMenu(uint8_t currentState, state_params_t *params)
-{
-	uint8_t retState = currentState;
-	if (params->m_key == KEY_OPEN) {
-		params->m_sub_menu_state++;
-		if (params->m_sub_menu_state == SUB_MENU_STATE_MAX) {
-			params->m_sub_menu_state = 0;
-		}
-		retState = sub_menu_states[params->m_sub_menu_state];
-	}
-	else if (params->m_key == KEY_CLOSE) {
-		params->m_sub_menu_state--;
-		if (params->m_sub_menu_state == 255) {
-			params->m_sub_menu_state = SUB_MENU_STATE_MAX-1;
-		}
-		retState = sub_menu_states[params->m_sub_menu_state];
+		retState = menu_states[params->m_menu_state];
 	}
 	return retState;
 }
@@ -524,7 +497,6 @@ uint8_t idleState(state_params_t *params)
 #endif
 		MotorStop();
 		params->m_enter = 0;
-		params->m_in_sub_menu = 0;
 		lastUpdate = 60;
 	}
 
@@ -558,7 +530,7 @@ uint8_t idleState(state_params_t *params)
 #endif
 
 	if (params->m_key == KEY_MENU) {
-		return ST_SETUP_MENU;
+		return ST_EXIT_MENU;
 	}
 	else if (params->m_key == KEY_OPEN) {
 		return ST_DOOR_OPENING;
@@ -577,7 +549,6 @@ uint8_t idleStateError(state_params_t *params)
 	if (params->m_enter) {
 		MotorStop();
 		params->m_enter = 0;
-		params->m_in_sub_menu = 0;
 		// close error
 		LCD_WriteLine(0, 16, "Door Close Error");
 		LCD_WriteLine(1, 16, "Check for dirt! ");
@@ -596,13 +567,12 @@ uint8_t setupMenu(state_params_t *params)
 		LCD_WriteLine(0, 16, "==    Setup   ==");
 		LCD_WriteLine(1, 16, "   Press Menu   ");
 		params->m_enter = 0;
-		params->m_in_sub_menu = 0;
 	}
 
 	if (params->m_key == KEY_MENU) {
 		return ST_SETUP_MENU_MODE;
 	}
-	return nextTopMenu(ST_SETUP_MENU, params);
+	return nextMenu(ST_SETUP_MENU, params);
 }
 
 /* ------------------------------------------------------------------ */
@@ -615,18 +585,10 @@ uint8_t exitMenu(state_params_t *params)
 		params->m_enter = 0;
 	}
 
-	if (params->m_in_sub_menu == 1) {
-		if (params->m_key == KEY_MENU) {
-			params->m_in_sub_menu = 0;
-			return ST_SETUP_MENU;
-		}
-		return nextSubMenu(ST_EXIT_MENU, params);
-	}
-
 	if (params->m_key == KEY_MENU) {
 		return ST_IDLE;
 	}
-	return nextTopMenu(ST_EXIT_MENU, params);
+	return nextMenu(ST_EXIT_MENU, params);
 }
 
 /* ------------------------------------------------------------------ */
@@ -637,7 +599,6 @@ uint8_t setupMenu_mode(state_params_t *params)
 		LCD_WriteLine(0, 16, "== Door Mode  ==");
 		LCD_WriteLine(1, 16, "   Press Menu   ");
 		params->m_enter = 0;
-		params->m_in_sub_menu = 1;
 	}
 
 	if (params->m_setup_change_state == 1) {
@@ -656,7 +617,7 @@ uint8_t setupMenu_mode(state_params_t *params)
 		params->m_temp = params->m_door_mode;
 	}
 
-	return nextSubMenu(ST_SETUP_MENU_MODE, params);
+	return nextMenu(ST_SETUP_MENU_MODE, params);
 }
 
 /* ------------------------------------------------------------------ */
@@ -667,7 +628,6 @@ uint8_t setupMenu_clock(state_params_t *params)
 		LCD_WriteLine(0, 16, "== Set Clock  ==");
 		LCD_WriteLine(1, 16, "   Press Menu   ");
 		params->m_enter = 0;
-		params->m_in_sub_menu = 1;
 	}
 
 	if ((params->m_setup_change_state > 0) && (params->m_setup_change_state < 4)) {
@@ -684,7 +644,7 @@ uint8_t setupMenu_clock(state_params_t *params)
 		return ST_SETUP_MENU_CLOCK;
 	}
 
-	return nextSubMenu(ST_SETUP_MENU_CLOCK, params);
+	return nextMenu(ST_SETUP_MENU_CLOCK, params);
 }
 #ifdef DS1307_BOARD
 /* ------------------------------------------------------------------ */
@@ -695,7 +655,6 @@ uint8_t setupMenu_date(state_params_t *params)
 		LCD_WriteLine(0, 16, "==  Set Date  ==");
 		LCD_WriteLine(1, 16, "   Press Menu   ");
 		params->m_enter = 0;
-		params->m_in_sub_menu = 1;
 	}
 
 	if ((params->m_setup_change_state > 0) && (params->m_setup_change_state < 6)) {
@@ -712,7 +671,7 @@ uint8_t setupMenu_date(state_params_t *params)
 		return ST_SETUP_MENU_DATE;
 	}
 
-	return nextSubMenu(ST_SETUP_MENU_DATE, params);
+	return nextMenu(ST_SETUP_MENU_DATE, params);
 }
 #endif /* #ifdef DS1307_BOARD */
 /* ------------------------------------------------------------------ */
@@ -723,7 +682,6 @@ uint8_t setupMenu_open_al(state_params_t *params)
 		LCD_WriteLine(0, 16, "=  Set Open AL =");
 		LCD_WriteLine(1, 16, "   Press Menu   ");
 		params->m_enter = 0;
-		params->m_in_sub_menu = 1;
 	}
 
 	if ((params->m_setup_change_state > 0) && (params->m_setup_change_state < 4)) {
@@ -740,7 +698,7 @@ uint8_t setupMenu_open_al(state_params_t *params)
 		return ST_SETUP_MENU_OPEN_AL;
 	}
 
-	return nextSubMenu(ST_SETUP_MENU_OPEN_AL, params);
+	return nextMenu(ST_SETUP_MENU_OPEN_AL, params);
 }
 
 /* ------------------------------------------------------------------ */
@@ -751,7 +709,6 @@ uint8_t setupMenu_close_al(state_params_t *params)
 		LCD_WriteLine(0, 16, "= Set Close AL =");
 		LCD_WriteLine(1, 16, "   Press Menu   ");
 		params->m_enter = 0;
-		params->m_in_sub_menu = 1;
 	}
 
 	if ((params->m_setup_change_state > 0) && (params->m_setup_change_state < 4)) {
@@ -768,7 +725,7 @@ uint8_t setupMenu_close_al(state_params_t *params)
 		return ST_SETUP_MENU_CLOSE_AL;
 	}
 
-	return nextSubMenu(ST_SETUP_MENU_CLOSE_AL, params);
+	return nextMenu(ST_SETUP_MENU_CLOSE_AL, params);
 }
 
 /* ------------------------------------------------------------------ */
@@ -934,9 +891,7 @@ int main (void)
 	/* set params initial state */
 	params.m_enter = 1;
 	params.m_key = KEY_NONE;
-	params.m_top_menu_state = 0;
-	params.m_sub_menu_state = 0;
-	params.m_in_sub_menu = 0;
+	params.m_menu_state = 0;
 	params.m_setup_change_state = 0;
 	params.m_door_state = DOOR_STATE_UNKNOWN;
 #ifdef LEONARDO_BOARD
