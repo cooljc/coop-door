@@ -259,6 +259,7 @@ void LCD_SetCursor(uint8_t state)
 			case LCD_CURSOR_MONTH:
 				// set cursot to month
 				lcd_setPosition (2, 9);
+				break;
 			case LCD_CURSOR_YEAR:
 				// set cursot to year
 				lcd_setPosition (2, 14);
@@ -322,6 +323,7 @@ void LCD_SetCursor(uint8_t state)
 			case LCD_CURSOR_MONTH:
 				// set cursot to month
 				lcd_setPosition (2, 9);
+				break;
 			case LCD_CURSOR_YEAR:
 				// set cursot to year
 				lcd_setPosition (2, 14);
@@ -375,7 +377,6 @@ void LCD_WriteDate(rtc_date_t currentDate)
 	lcd_command ('0', DATA);
 	lcd_command (ascii[n1], DATA);
 	lcd_command (ascii[n2], DATA);
-	lcd_command ('/', DATA);
 
 	lcd_command (CMD_RETURN_HOME, COMMAND); // return home
 }
