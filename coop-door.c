@@ -32,12 +32,14 @@
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 #include "wdt_drv.h"
+#ifdef LEONARDO_BOARD
+#include "i2cmaster.h"
+#endif /* #ifdef LEONARDO_BOARD */
 #include "common.h"
 #include "button-driver.h"
 #include "lcd-driver.h"
 #include "rtc.h"
 #include "data-store.h"
-
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 
@@ -46,7 +48,7 @@
 // Switches on POP-168 board: PD2 (Di2) & PD4 (Di4)
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
-
+#ifdef POP168_BOARD
 #define LED1      		(1 << PD2)
 #define LED2			(1 << PD4)
 #define InitLED()		(DDRD |= (LED1 | LED2))
@@ -56,7 +58,17 @@
 #define Led2On()		(PORTD |= LED2)
 #define Led2Off()		(PORTD &= ~LED2)
 #define Led2Toggle()	(PIND |= LED2)
+#else /* LEONARDO_BOARD */
+#define InitLED()
+#define Led1On()
+#define Led1Off()
+#define Led1Toggle()
+#define Led2On()
+#define Led2Off()
+#define Led2Toggle()
+#endif /* #ifdef POP168_BOARD */
 
+#ifdef POP168_BOARD
 #define USE_MOTOR_CHANNEL_B 1
 
 // Motor is on PORTD bit 3 and 5
@@ -77,6 +89,30 @@
 #define MotorForward()	(PORTB |= MB_1)
 #define MotorBackward()	(PORTD |= MB_2)
 #endif
+#else /* LEONARDO_BOARD */
+/*
+ * Arduino Motor Shield (L293)
+ * MotorA uses Digital 4(PD4) DIR, 5(PC6) PWM
+ * MotorB uses Digital 6(PD7) PWM, 7(PE6) DIR
+ */
+#ifndef USE_MOTOR_CHANNEL_B
+#define MA_1			(1 << PD4)
+#define MA_2			(1 << PC6)
+#define InitMotor()		DDRD |= MA_1; DDRC |= MA_2
+#define MotorStop()		PORTD &= ~(MA_1); PORTC &= ~(MA_2)
+#define MotorBrake()	//PORTD |= MA_1; PORTC |= MA_2
+#define MotorForward()	PORTD |= MA_1; PORTC |= MA_2
+#define MotorBackward() PORTD &= ~MA_1; PORTC |= MA_2
+#else /* #ifndef USE_MOTOR_CHANNEL_B */
+#define MB_1			(1 << PD7)
+#define MB_2			(1 << PE6)
+#define InitMotor()		DDRD |= MB_1; DDRE |= MB_2
+#define MotorStop()		PORTD &= ~(MB_1); PORTE &= ~(MB_2)
+#define MotorBrake()	PORTD |= MB_1; PORTE |= MB_2
+#define MotorForward()
+#define MotorBackward()
+#endif /* #ifndef USE_MOTOR_CHANNEL_B */
+#endif /* #ifdef USE_OLD_COOP_DOOR */
 
 typedef struct {
 	uint8_t 	m_enter;
@@ -90,6 +126,11 @@ typedef struct {
 	uint32_t	m_menu_timeout;
 	uint8_t		m_temp;
 	uint8_t		m_open_sw_inhibit;
+#ifdef DS1307_BOARD
+	uint8_t		m_lastHour;
+	uint8_t		m_lastDay;
+	rtc_date_t	m_date;
+#endif /* #ifdef DS1307_BOARD */
 	rtc_time_t 	m_time;
 } state_params_t;
 
@@ -111,6 +152,9 @@ uint8_t setupMenu(state_params_t *params);
 uint8_t exitMenu(state_params_t *params);
 uint8_t setupMenu_mode(state_params_t *params);
 uint8_t setupMenu_clock(state_params_t *params);
+#ifdef DS1307_BOARD
+uint8_t setupMenu_date(state_params_t *params);
+#endif /* #ifdef DS1307_BOARD */
 uint8_t setupMenu_open_al(state_params_t *params);
 uint8_t setupMenu_close_al(state_params_t *params);
 uint8_t doorOpening(state_params_t *params);
@@ -123,6 +167,9 @@ enum {
 	ST_EXIT_MENU,
 	ST_SETUP_MENU_MODE,
 	ST_SETUP_MENU_CLOCK,
+#ifdef DS1307_BOARD
+	ST_SETUP_MENU_DATE,
+#endif /* #ifdef DS1307_BOARD */
 	ST_SETUP_MENU_OPEN_AL,
 	ST_SETUP_MENU_CLOSE_AL,
 	ST_DOOR_OPENING,
@@ -137,6 +184,9 @@ func_p states[ST_MAX] = {idleState,
 						exitMenu,
 						setupMenu_mode,
 						setupMenu_clock,
+#ifdef DS1307_BOARD
+						setupMenu_date,
+#endif /* #ifdef DS1307_BOARD */
 						setupMenu_open_al,
 						setupMenu_close_al,
 						doorOpening,
@@ -145,12 +195,22 @@ func_p states[ST_MAX] = {idleState,
 #define TOP_MENU_STATE_MAX 2
 uint8_t top_menu_states[TOP_MENU_STATE_MAX] = {ST_SETUP_MENU, ST_EXIT_MENU};
 
+#ifdef DS1307_BOARD
+#define SUB_MENU_STATE_MAX 6
+uint8_t sub_menu_states[SUB_MENU_STATE_MAX] = {ST_SETUP_MENU_MODE,
+											   ST_SETUP_MENU_CLOCK,
+											   ST_SETUP_MENU_DATE,
+											   ST_SETUP_MENU_OPEN_AL,
+											   ST_SETUP_MENU_CLOSE_AL,
+											   ST_EXIT_MENU};
+#else
 #define SUB_MENU_STATE_MAX 5
 uint8_t sub_menu_states[SUB_MENU_STATE_MAX] = {ST_SETUP_MENU_MODE,
 											   ST_SETUP_MENU_CLOCK,
 											   ST_SETUP_MENU_OPEN_AL,
 											   ST_SETUP_MENU_CLOSE_AL,
 											   ST_EXIT_MENU};
+#endif /* #ifdef DS1307_BOARD */
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
@@ -288,6 +348,124 @@ uint8_t SetTimeValue(uint8_t currentState, state_params_t *params)
 	return currentState;
 }
 
+#ifdef DS1307_BOARD
+uint8_t SetDateValue(uint8_t currentState, state_params_t *params)
+{
+	if (params->m_enter) {
+		if (currentState == ST_SETUP_MENU_DATE) {
+			RTC_GetDate(&params->m_date);
+		}
+		LCD_WriteLine(0, 16, "                ");
+		LCD_WriteLine(1, 16, "                ");
+		LCD_WriteDate(params->m_date);
+		LCD_SetCursor(LCD_CURSOR_DAYNAME);
+		params->m_enter = 0;
+	}
+
+	if (params->m_key == KEY_OPEN) {
+		if (params->m_setup_change_state == 1) {
+			// update day name
+			params->m_date.m_dayNumber++;
+			if (params->m_date.m_dayNumber == 8) {
+				params->m_date.m_dayNumber = 1;
+			}
+			LCD_WriteDate(params->m_date);
+			LCD_SetCursor(LCD_CURSOR_DAYNAME);
+		}
+		else if (params->m_setup_change_state == 2) {
+			// update day
+			params->m_date.m_day++;
+			if (params->m_date.m_day == 32) {
+				params->m_date.m_day = 1;
+			}
+			LCD_WriteDate(params->m_date);
+			LCD_SetCursor(LCD_CURSOR_DAY);
+		}
+		else if (params->m_setup_change_state == 3) {
+			// update month
+			params->m_date.m_month++;
+			if (params->m_date.m_month == 13) {
+				params->m_date.m_month = 1;
+			}
+			LCD_WriteDate(params->m_date);
+			LCD_SetCursor(LCD_CURSOR_MONTH);
+		}
+		else if (params->m_setup_change_state == 4) {
+			// update year
+			params->m_date.m_year++;
+			if (params->m_date.m_year == 100) {
+				params->m_date.m_year = 0;
+			}
+			LCD_WriteDate(params->m_date);
+			LCD_SetCursor(LCD_CURSOR_YEAR);
+		}
+	}
+	else if (params->m_key == KEY_CLOSE) {
+		if (params->m_setup_change_state == 1) {
+			// update day name
+			params->m_date.m_dayNumber--;
+			if (params->m_date.m_dayNumber == 255) {
+				params->m_date.m_dayNumber = 7;
+			}
+			LCD_WriteDate(params->m_date);
+			LCD_SetCursor(LCD_CURSOR_DAYNAME);
+		}
+		else if (params->m_setup_change_state == 2) {
+			// update day
+			params->m_date.m_day--;
+			if (params->m_date.m_day == 255) {
+				params->m_date.m_day = 31;
+			}
+			LCD_WriteDate(params->m_date);
+			LCD_SetCursor(LCD_CURSOR_DAY);
+		}
+		else if (params->m_setup_change_state == 3) {
+			// update month
+			params->m_date.m_month--;
+			if (params->m_date.m_month == 255) {
+				params->m_date.m_month = 12;
+			}
+			LCD_WriteDate(params->m_date);
+			LCD_SetCursor(LCD_CURSOR_MONTH);
+		}
+		else if (params->m_setup_change_state == 4) {
+			// update year
+			params->m_date.m_year--;
+			if (params->m_date.m_year == 255) {
+				params->m_date.m_year = 99;
+			}
+			LCD_WriteDate(params->m_date);
+			LCD_SetCursor(LCD_CURSOR_YEAR);
+		}
+	}
+	else if (params->m_key == KEY_MENU) {
+		params->m_setup_change_state++;
+		if (params->m_setup_change_state == 2) {
+			// change LCD to min
+			LCD_SetCursor(LCD_CURSOR_DAY);
+		}
+		else if (params->m_setup_change_state == 3) {
+			// change LCD to min
+			LCD_SetCursor(LCD_CURSOR_MONTH);
+		}
+		if (params->m_setup_change_state == 4) {
+			// change LCD to min
+			LCD_SetCursor(LCD_CURSOR_YEAR);
+		}
+		else if (params->m_setup_change_state == 5) {
+			// save date
+			LCD_SetCursor(LCD_CURSOR_OFF);
+			LCD_WriteLine(0, 16, "Saving...       ");
+			if (currentState == ST_SETUP_MENU_DATE) {
+				RTC_SetDate(&params->m_date);
+			}
+			params->m_setup_change_state = 6;
+		}
+	}
+	return currentState;
+}
+
+#endif /* #ifdef DS1307_BOARD */
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 uint8_t SetModeValue(uint8_t currentState, state_params_t *params)
@@ -335,7 +513,11 @@ uint8_t idleState(state_params_t *params)
 #else
 		LCD_WriteLine(0, 16, "     --:--      ");
 #endif
+#ifdef DS1307_BOARD
+		LCD_WriteDate(params->m_date);
+#else
 		LCD_WriteLine(1, 16, "     cooljc     ");
+#endif
 		MotorStop();
 		params->m_enter = 0;
 		params->m_in_sub_menu = 0;
@@ -354,6 +536,20 @@ uint8_t idleState(state_params_t *params)
 	if (lastUpdate != currentTime.m_min) {
 		LCD_WriteTime(currentTime);
 		lastUpdate = currentTime.m_min;
+	}
+#endif
+
+#ifdef DS1307_BOARD
+	/* check for day change - re-sync local RTC with external RTC */
+	if (params->m_lastHour != currentTime.m_hour) {
+		params->m_lastHour = currentTime.m_hour;
+		RTC_GetDate(&params->m_date);
+		if (params->m_lastDay != params->m_date.m_dayNumber) {
+			/* Day has changed */
+			params->m_lastDay = params->m_date.m_dayNumber;
+			RTC_SyncTime();
+			LCD_WriteDate(params->m_date);
+		}
 	}
 #endif
 
@@ -486,7 +682,35 @@ uint8_t setupMenu_clock(state_params_t *params)
 
 	return nextSubMenu(ST_SETUP_MENU_CLOCK, params);
 }
+#ifdef DS1307_BOARD
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+uint8_t setupMenu_date(state_params_t *params)
+{
+	if ((params->m_enter) && (params->m_setup_change_state == 0)) {
+		LCD_WriteLine(0, 16, "==  Set Date  ==");
+		LCD_WriteLine(1, 16, "   Press Menu   ");
+		params->m_enter = 0;
+		params->m_in_sub_menu = 1;
+	}
 
+	if ((params->m_setup_change_state > 0) && (params->m_setup_change_state < 6)) {
+		return SetDateValue(ST_SETUP_MENU_DATE, params);
+	}
+	else if (params->m_setup_change_state == 6) {
+		params->m_enter = 1;
+		params->m_setup_change_state = 0;
+	}
+
+	if (params->m_key == KEY_MENU) {
+		params->m_enter = 1;
+		params->m_setup_change_state = 1;
+		return ST_SETUP_MENU_DATE;
+	}
+
+	return nextSubMenu(ST_SETUP_MENU_DATE, params);
+}
+#endif /* #ifdef DS1307_BOARD */
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 uint8_t setupMenu_open_al(state_params_t *params)
@@ -643,10 +867,14 @@ void setDefaultTimes (void)
 {
 	rtc_time_t times;
 
+#ifdef DS1307_BOARD
+	RTC_SyncTime ();
+#else
 	times.m_hour = 16;
 	times.m_min = 0;
 	times.m_sec = 0;
 	RTC_SetTime(&times);
+#endif
 
 	// Read alarm times from EEP
 	DS_GetOpenAlarm(&times);
@@ -682,7 +910,12 @@ int main (void)
 	MotorStop();
 
 	BUTTON_Init();
+#ifdef LEONARDO_BOARD
+	/* initialise I2C Driver */
+	i2c_init ();
+#endif
 	LCD_Init();
+	LCD_SetBacklight(1);
 	setDefaultTimes();
 	RTC_Init();
 
@@ -696,6 +929,10 @@ int main (void)
 	params.m_in_sub_menu = 0;
 	params.m_setup_change_state = 0;
 	params.m_door_state = DOOR_STATE_UNKNOWN;
+#ifdef DS1307_BOARD
+	params.m_lastHour = 24;
+	params.m_lastDay = 8;
+#endif /* #ifdef DS1307_BOARD */
 	DS_GetAlarmMode(&params.m_door_mode);
 
 	while (1)
