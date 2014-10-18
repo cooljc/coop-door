@@ -41,15 +41,7 @@ volatile uint32_t secondTick;
 /* ------------------------------------------------------------------ */
 static uint8_t rtc_bcd2dec (uint8_t bcd)
 {
-	uint8_t cnt, ten = 1;
-	uint8_t dec = 0;
-
-	for (cnt = 0; cnt < 2 && bcd != 0; cnt++)
-	{
-		dec += (bcd & 0x0F) * ten;
-		bcd >>= 4;
-		ten *= 10;
-	}
+	uint8_t dec = (10 * ((bcd & 0xf0) >> 4)) + (bcd & 0x0f);
 	return (dec);
 }
 
@@ -57,17 +49,7 @@ static uint8_t rtc_bcd2dec (uint8_t bcd)
 /* ------------------------------------------------------------------ */
 static uint8_t rtc_dec2bcd (uint8_t dec)
 {
-	uint8_t bcd, shift;
-
-	bcd = 0;
-	shift = 0;
-
-	while (dec > 0 )
-	{
-		bcd += (dec % 10) << shift;
-		dec /= 10;
-		shift += 4;
-	}
+	uint8_t bcd = ((dec / 10) << 4) + (dec % 10);
 	return bcd;
 }
 
@@ -97,7 +79,7 @@ static void rtc_writeTimeToRTC (rtc_time_t *newTime)
 	data[0] = 0x00; /* sets the first address*/
 	data[1] = (rtc_dec2bcd(newTime->m_sec) & 0x7f);
 	data[2] = (rtc_dec2bcd(newTime->m_min) & 0x7f);
-	data[3] = (rtc_dec2bcd(newTime->m_hour) & 0x3f) | 0x40; /* set 24hr mode */
+	data[3] = (rtc_dec2bcd(newTime->m_hour) & 0x3f);// | 0x40; /* set 12hr mode */
 	
 	i2c_start (RTC_SLAVE_ADDR|I2C_WRITE);
 	i2c_write (data[0]);
