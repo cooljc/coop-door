@@ -255,6 +255,7 @@ uint8_t SetTimeValue(uint8_t currentState, state_params_t *params)
 		LCD_WriteLine(1, 16, "                ");
 		LCD_WriteTime(params->m_time);
 		LCD_SetCursor(LCD_CURSOR_HOUR);
+		LCD_SetCursor(LCD_CURSOR_HOUR);
 		params->m_enter = 0;
 	}
 
@@ -335,6 +336,7 @@ uint8_t SetDateValue(uint8_t currentState, state_params_t *params)
 		LCD_WriteLine(0, 16, "                ");
 		LCD_WriteLine(1, 16, "                ");
 		LCD_WriteDate(params->m_date);
+		LCD_SetCursor(LCD_CURSOR_DAYNAME);
 		LCD_SetCursor(LCD_CURSOR_DAYNAME);
 		params->m_enter = 0;
 	}
