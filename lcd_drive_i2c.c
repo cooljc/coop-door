@@ -315,11 +315,11 @@ void LCD_SetCursor(uint8_t state)
 		switch (state) {
 			case LCD_CURSOR_HOUR:
 				// set cursor to hour
-				lcd_setPosition (1, 5);
+				lcd_setPosition (1, 6);
 				break;
 			case LCD_CURSOR_MIN:
 				// set cursot to minute
-				lcd_setPosition (1, 8);
+				lcd_setPosition (1, 9);
 				break;
 			case LCD_CURSOR_DAYNAME:
 				// set cursot to day name
