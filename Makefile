@@ -180,7 +180,7 @@ CFLAGS += -Wa,-adhlns=$(<:%.c=$(OBJDIR)/%.lst)
 CFLAGS += $(patsubst %,-I%,$(EXTRAINCDIRS))
 CFLAGS += $(CSTANDARD)
 CFLAGS += -DAVRGCC 
-CFLAGS += -DCLOCK_SHOW_SECONDS
+#CFLAGS += -DCLOCK_SHOW_SECONDS
 
 # Build flags for Leonardo board (new controller)
 ifdef LEONARDO_BOARD
